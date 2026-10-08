@@ -27,6 +27,7 @@ import (
 	"github.com/matrixhub-ai/matrixhub/internal/domain/dataset"
 	"github.com/matrixhub-ai/matrixhub/internal/domain/model"
 	"github.com/matrixhub-ai/matrixhub/internal/domain/project"
+	"github.com/matrixhub-ai/matrixhub/internal/domain/registry"
 	"github.com/matrixhub-ai/matrixhub/internal/domain/syncjob"
 	"github.com/matrixhub-ai/matrixhub/internal/domain/syncpolicy"
 	appconfig "github.com/matrixhub-ai/matrixhub/internal/infra/config"
@@ -221,6 +222,42 @@ func assertCASUpdatesTimestamps(t *testing.T, database *gorm.DB) {
 	require.NoError(t, err)
 	require.True(t, updated)
 	requireTimestampAdvanced(t, database, "sync_jobs", int64(job.ID), oldTimestamp)
+}
+
+func TestRegistryRepo_UpdateAllEditableFieldsIncludingZeroValues(t *testing.T) {
+	database, _ := newSQLiteRepositoryTestDatabase(t)
+	ctx := context.Background()
+	repo := NewRegistryRepo(database)
+
+	initial := registry.Registry{
+		Name:        "upstream-hf",
+		Description: "original description",
+		URL:         "https://hf-mirror.com",
+		Type:        "REGISTRY_TYPE_HUGGINGFACE",
+		Insecure:    true,
+	}
+	initial.SetCredential(registry.NewBasicCredential("old-user", "old-password"))
+	reg, err := repo.CreateRegistry(ctx, initial)
+	require.NoError(t, err)
+
+	// PUT sends all editable fields; clearing description and credentials must persist.
+	err = repo.UpdateRegistry(ctx, registry.Registry{
+		ID:       reg.ID,
+		Name:     "updated-hf",
+		URL:      "https://huggingface.co",
+		Insecure: false,
+	})
+	require.NoError(t, err)
+
+	fetched, err := repo.GetRegistry(ctx, reg.ID)
+	require.NoError(t, err)
+	require.Equal(t, "updated-hf", fetched.Name)
+	require.Equal(t, "https://huggingface.co", fetched.URL)
+	require.Empty(t, fetched.Description)
+	require.Empty(t, fetched.CredentialType)
+	require.Empty(t, fetched.AuthInfo)
+	require.False(t, fetched.Insecure)
+	require.Equal(t, initial.Type, fetched.Type)
 }
 
 func requireTimestampAdvanced(t *testing.T, database *gorm.DB, table string, id int64, oldTimestamp time.Time) {

@@ -63,7 +63,15 @@ func (r *RegistryRepo) CreateRegistry(ctx context.Context, reg registry.Registry
 }
 
 func (r *RegistryRepo) UpdateRegistry(ctx context.Context, reg registry.Registry) error {
-	return r.db.WithContext(ctx).Model(&registry.Registry{}).Where("id = ?", reg.ID).Updates(reg).Error
+	updates := map[string]any{
+		"name":            reg.Name,
+		"description":     reg.Description,
+		"url":             reg.URL,
+		"insecure":        reg.Insecure,
+		"credential_type": reg.CredentialType,
+		"auth_info":       reg.AuthInfo,
+	}
+	return r.db.WithContext(ctx).Model(&registry.Registry{}).Where("id = ?", reg.ID).Updates(updates).Error
 }
 
 func (r *RegistryRepo) DeleteRegistry(ctx context.Context, id int) error {
